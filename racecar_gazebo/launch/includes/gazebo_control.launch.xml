@@ -2,6 +2,7 @@
 
 <launch>
   <arg name="prefix" default="racecar"/>
+  <arg name="publish_odom_tf" default="true"/>
   <!-- Load joint controller configurations from YAML file to parameter server -->
   <rosparam file="$(find racecar_gazebo)/config/gazebo_control.yaml" command="load"/>
 
@@ -23,7 +24,7 @@
 
   <!-- Allow for Gazebo to broadcast odom -->
   <node pkg="racecar_gazebo" name="gazebo_odometry_node" type="gazebo_odometry.py" output="screen">
-    <param name="publish_tf" value="true"/>
+    <param name="publish_tf" value="$(arg publish_odom_tf)"/>
     <param name="link_prefix" value="$(arg prefix)"/>
     <param name="frame_id" value="$(arg prefix)/base_footprint"/>
     <param name="odom_frame_id" value="$(arg prefix)/odom"/>

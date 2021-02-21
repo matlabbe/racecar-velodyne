@@ -4,8 +4,11 @@
   <arg name="joy" default="js0" />
   <arg name="x" default="0" />
   <arg name="y" default="0" />
+  <arg name="z" default="0.05" />
   <arg name="theta" default="0" />
   <arg name="web_server" default="false"/> <!-- Launch a web server -->
+  <arg name="urdf" default="racecar"/>
+  <arg name="publish_odom_tf" default="true"/>
   
   <!-- Black, Blue, Green, DarkGrey, Orange, Red,
        White, Yellow, Turquoise, SkyBlue, Indigo -->
@@ -29,14 +32,15 @@
     </node>
 
     <!-- urdf xml robot description loaded on the Parameter Server, converting the xacro into a proper urdf file-->
-    <param name="robot_description" command="$(find xacro)/xacro '$(find racecar_description)/urdf/racecar.xacro' prefix:=$(arg prefix) color:=$(arg color)" />
+    <param name="robot_description" command="$(find xacro)/xacro '$(find racecar_description)/urdf/$(arg urdf).xacro' prefix:=$(arg prefix) color:=$(arg color)" />
 
     <!-- push robot_description to factory and spawn robot in gazebo -->
-    <node name="racecar_spawn" pkg="gazebo_ros" type="spawn_model" output="screen" args="-urdf -param robot_description -model $(arg prefix) -x $(arg x) -y $(arg y) -z 0.05 -Y $(arg theta)" />
+    <node name="racecar_spawn" pkg="gazebo_ros" type="spawn_model" output="screen" args="-urdf -param robot_description -model $(arg prefix) -x $(arg x) -y $(arg y) -z $(arg z) -Y $(arg theta)" />
 
     <!-- low-level gazebo control launch file -->
     <include file="$(find racecar_gazebo)/launch/includes/gazebo_control.launch.xml">
       <arg name="prefix" value="$(arg prefix)"/>
+      <arg name="publish_odom_tf" value="$(arg publish_odom_tf)"/>
     </include>
     
     <!-- Hack to republish image as compressed like on the real car, as publishing compressed from gazebo makes it crash -->
