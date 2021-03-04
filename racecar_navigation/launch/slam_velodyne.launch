@@ -3,40 +3,62 @@
   
     <!-- 
     Prerequisities: rtabmap should be built with libpointmatcher
+    
     Example:
-     $ roslaunch racecar_gazebo racecar_parking_garage.launch
-     $ roslaunch racecar_navigation slam_velodyne.launch
-     $ roslaunch racecar_navigation rviz.launch
+     1) 6DoF SLAM + ICP odometry
+        $ roslaunch racecar_gazebo racecar_parking_garage.launch publish_odom_tf:=false
+        $ roslaunch racecar_navigation slam_velodyne.launch
+        
+     2) 6DoF SLAM + ICP odometry + external odometry as guess
+        $ roslaunch racecar_gazebo racecar_parking_garage.launch publish_odom_tf:=true
+        $ roslaunch racecar_navigation slam_velodyne.launch odom_guess:=true
+        
+     3) 6DoF SLAM + external odometry (the default racecar odometry has poor angular estimation, turn slowly)
+        $ roslaunch racecar_gazebo racecar_parking_garage.launch publish_odom_tf:=true
+        $ roslaunch racecar_navigation slam_velodyne.launch icp_odometry:=false
+        
+     4) 2D SLAM + ICP odometry
+        $ roslaunch racecar_gazebo racecar_parking_garage.launch publish_odom_tf:=false
+        $ roslaunch racecar_navigation slam_velodyne.launch slam2d:=true
+        
+     5) 2D SLAM + ICP odometry + external odometry as guess
+        $ roslaunch racecar_gazebo racecar_parking_garage.launch publish_odom_tf:=true
+        $ roslaunch racecar_navigation slam_velodyne.launch slam2d:=true odom_guess:=true
+        
+     6) 2D SLAM + external odometry (the default racecar odometry has poor angular estimation, turn slowly)
+        $ roslaunch racecar_gazebo racecar_parking_garage.launch publish_odom_tf:=true
+        $ roslaunch racecar_navigation slam_velodyne.launch slam2d:=true icp_odometry:=false
+        
     -->
 
-    <arg name="prefix" default="racecar"/>
-    <arg name="localization" default="false"/> 
-    <arg name="database_path" default="~/.ros/rtabmap_$(arg prefix).db"/> 
-    <arg name="odom_correction" default="true"/> 
-    <arg name="rtabmapviz"    default="false"/>
-    <arg name="cell_size"    default="0.3"/>
+    <arg name="prefix"          default="racecar"/>
+    <arg name="localization"    default="false"/> 
+    <arg name="database_path"   default="~/.ros/rtabmap_$(arg prefix).db"/> 
+    <arg name="icp_odometry"    default="true"/>
+    <arg name="odom_guess"      default="false"/> <!-- used only if icp_odometry:=true-->
+    <arg name="keep_raw_scans"  default="false"/> <!-- keep raw scans in database -->
+    <arg name="cell_size"       default="0.3"/>
+    <arg name="slam2d"          default="false"/>
+    <arg name="imu"             default="true"/>  <!-- more robust to fast rotations, not used by icp_odometry if odom_guess is true -->
+    
+    <!-- visualization -->
+    <arg name="rtabmapviz"      default="false"/>
+    <arg name="rviz"            default="true"/>
   
     <arg     if="$(arg localization)" name="rtabmap_args" value="--Mem/IncrementalMemory false"/>
     <arg unless="$(arg localization)" name="rtabmap_args" value="--delete_db_on_start"/>    
 
     <group ns="$(arg prefix)">
     
-      <!-- IMU orientation estimation and publish tf accordingly to base frame -->
-      <node pkg="rtabmap_ros" type="imu_to_tf" name="imu_to_tf">
-        <remap from="imu/data" to="imu/data"/>
-        <param name="fixed_frame_id" value="$(arg prefix)/base_footprint_stabilized"/>
-        <param name="base_frame_id" value="$(arg prefix)/base_footprint"/>
-      </node> 
-    
-      <node pkg="rtabmap_ros" type="icp_odometry" name="icp_odometry" output="screen">
+      <node if="$(arg icp_odometry)" pkg="rtabmap_ros" type="icp_odometry" name="icp_odometry" output="screen">
         <remap from="scan_cloud" to="velodyne_points"/>
         <param name="frame_id"        type="string" value="$(arg prefix)/base_footprint"/>  
-        <param name="odom_frame_id"   type="string" value="$(arg prefix)/odom"/>
+        <param name="odom_frame_id"   type="string" value="$(arg prefix)/icp_odom"/>
         <param name="expected_update_rate" type="double" value="15"/>
 
-        <remap from="imu" to="imu/data"/>
-        <param name="guess_frame_id"   type="string" value="$(arg prefix)/base_footprint_stabilized"/>
-        <param name="wait_imu_to_init" type="bool" value="true"/>
+        <remap if="$(arg imu)" from="imu" to="imu/data"/>
+        <param if="$(arg odom_guess)" name="guess_frame_id" type="string" value="$(arg prefix)/odom"/>
+        <param if="$(arg imu)" name="wait_imu_to_init" type="bool" value="true"/>
      
         <!-- ICP parameters -->
         <param name="Icp/PointToPlane"        type="string" value="true"/>
@@ -56,7 +78,8 @@
         <param name="Odom/ScanKeyFrameThr"       type="string" value="0.9"/>
         <param name="Odom/Strategy"              type="string" value="0"/>
         <param name="OdomF2M/ScanSubtractRadius" type="string" value="$(arg cell_size)"/>
-        <param name="OdomF2M/ScanMaxSize"        type="string" value="15000"/>      
+        <param name="OdomF2M/ScanMaxSize"        type="string" value="15000"/>   
+        <param name="Reg/Force3DoF"              type="string" value="$(arg slam2d)"/>   
       </node>
 
       <node pkg="rtabmap_ros" type="rtabmap" name="rtabmap" output="screen" args="$(arg rtabmap_args) --uerror">	  
@@ -66,16 +89,19 @@
         <param name="subscribe_depth"      type="bool" value="false"/>
         <param name="subscribe_rgb"        type="bool" value="false"/>
         <param name="subscribe_scan_cloud" type="bool" value="true"/>
-        <param name="approx_sync"          type="bool" value="false"/>
+        <param     if="$(arg icp_odometry)" name="approx_sync" type="bool" value="false"/>
+        <param unless="$(arg icp_odometry)" name="approx_sync" type="bool" value="true"/>
         
         <remap from="scan_cloud" to="assembled_cloud"/>
-        <remap from="imu" to="imu/data"/>
+        <remap if="$(arg imu)" from="imu" to="imu/data"/>
         <remap from="grid_map" to="map"/>
         <remap from="move_base" to="move_base"/>
+        <remap unless="$(arg icp_odometry)" from="odom" to="odometry/filtered"/>
      
         <!-- RTAB-Map's parameters -->
         <param name="Rtabmap/DetectionRate"          type="string" value="1"/>  
-        <param name="RGBD/NeighborLinkRefining"      type="string" value="false"/>
+        <param     if="$(arg icp_odometry)" name="RGBD/NeighborLinkRefining" type="string" value="false"/>
+        <param unless="$(arg icp_odometry)" name="RGBD/NeighborLinkRefining" type="string" value="true"/>
         <param name="RGBD/ProximityBySpace"          type="string" value="true"/>
         <param name="RGBD/ProximityMaxGraphDepth"    type="string" value="0"/>
         <param name="RGBD/ProximityPathMaxNeighbors" type="string" value="1"/>
@@ -83,11 +109,12 @@
         <param name="RGBD/LinearUpdate"              type="string" value="0.05"/>
         <param name="Mem/NotLinkedNodesKept"         type="string" value="false"/>
         <param name="Mem/STMSize"                    type="string" value="30"/>
-        <!-- param name="Mem/LaserScanVoxelSize"     type="string" value="0.1"/ -->
-        <!-- param name="Mem/LaserScanNormalK"       type="string" value="10"/ -->
-        <!-- param name="Mem/LaserScanRadius"        type="string" value="0"/ -->
+        <param unless="$(arg keep_raw_scans)" name="Mem/LaserScanVoxelSize" type="string" value="$(arg cell_size)"/>
+        <param unless="$(arg keep_raw_scans)" name="Mem/LaserScanNormalK"   type="string" value="20"/>
+        <param unless="$(arg keep_raw_scans)" name="Mem/LaserScanRadius"    type="string" value="0"/>
         
         <param name="Reg/Strategy"                   type="string" value="1"/> 
+        <param name="Reg/Force3DoF"                  type="string" value="$(arg slam2d)"/>
         <param name="Grid/CellSize"                  type="string" value="$(arg cell_size)"/>
         <param name="Grid/RangeMax"                  type="string" value="20"/>
         <param name="Grid/RayTracing"                type="string" value="true"/>
@@ -95,10 +122,12 @@
         <param name="Grid/GroundIsObstacle"          type="string" value="false"/>
         <param name="Grid/MaxObstacleHeight"         type="string" value="0.5"/>
         <param name="GridGlobal/AltitudeDelta"       type="string" value="1"/>
+        <param name="GridGlobal/UpdateError"         type="string" value="0.05"/>
         <param name="Optimizer/GravitySigma"         type="string" value="0.3"/>
 
         <!-- ICP parameters -->
-        <param name="Icp/VoxelSize"                  type="string" value="$(arg cell_size)"/>
+        <param     if="$(arg keep_raw_scans)" name="Icp/VoxelSize" type="string" value="$(arg cell_size)"/>
+        <param unless="$(arg keep_raw_scans)" name="Icp/VoxelSize" type="string" value="0"/>
         <param name="Icp/PointToPlaneK"              type="string" value="20"/>
         <param name="Icp/PointToPlaneRadius"         type="string" value="0"/>
         <param name="Icp/PointToPlane"               type="string" value="true"/>
@@ -114,7 +143,7 @@
       <node if="$(arg rtabmapviz)" name="rtabmapviz" pkg="rtabmap_ros" type="rtabmapviz" output="screen">
         <param name="frame_id" type="string" value="$(arg prefix)/base_footprint"/>
         <param name="odom_frame_id" type="string" value="$(arg prefix)/odom"/>
-        <param name="subscribe_odom_info" type="bool" value="true"/>
+        <param name="subscribe_odom_info" type="bool" value="$(arg icp_odometry)"/>
         <param name="subscribe_scan_cloud" type="bool" value="true"/>
         <param name="approx_sync" type="bool" value="false"/>
         <remap from="scan_cloud" to="velodyne_points"/>
@@ -123,9 +152,12 @@
       <node pkg="nodelet" type="nodelet" name="point_cloud_assembler" args="standalone rtabmap_ros/point_cloud_assembler" output="screen">
         <remap from="cloud"           to="velodyne_points"/>
         <remap from="odom"            to="odom"/>
-        <param name="max_clouds"      type="int"    value="10" />
-        <param name="fixed_frame_id"  type="string" value="" />
+        <param name="assembling_time" type="double"    value="1" />
+        <param     if="$(arg icp_odometry)" name="fixed_frame_id"  type="string" value="" />
+        <param unless="$(arg icp_odometry)" name="fixed_frame_id"  type="string" value="$(arg prefix)/odom" />
       </node>
   </group>
+  
+  <include file="$(find racecar_navigation)/launch/rviz.launch"/>
 
 </launch>

@@ -4,6 +4,7 @@
   <arg name="web_server" default="false"/>
   <arg name="joy" default="js0" />
   <arg name="prefix" default="racecar" />
+  <arg name="publish_odom_tf" default="false" />
   
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
     <arg name="world_name" value="$(find racecar_gazebo)/worlds/racecar_parking_garage.world"/>
@@ -17,6 +18,6 @@
     <arg name="urdf" value="racecar_velodyne"/>
     <arg name="x" value="10"/>
     <arg name="z" value="0.5"/>
-    <arg name="publish_odom_tf" value="false"/>
+    <arg name="publish_odom_tf" value="$(arg publish_odom_tf)"/>
   </include>
 </launch>
